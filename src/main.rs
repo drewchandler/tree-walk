@@ -31,7 +31,8 @@ fn main() -> Result<()> {
 }
 
 fn run_prompt() -> Result<()> {
-    let mut interpreter = interpreter::Interpreter::new();
+    let mut stdout = io::stdout();
+    let mut interpreter = interpreter::Interpreter::new(&mut stdout);
 
     loop {
         print!("> ");
@@ -55,7 +56,10 @@ fn run_prompt() -> Result<()> {
 fn run_file<P: AsRef<path::Path> + fmt::Display>(filename: P) -> Result<()> {
     let source = fs::read_to_string(filename)?;
 
-    if let Err(e) = run(&mut interpreter::Interpreter::new(), source) {
+    if let Err(e) = run(
+        &mut interpreter::Interpreter::new(&mut io::stdout()),
+        source,
+    ) {
         eprintln!("{}", e);
         std::process::exit(70);
     }

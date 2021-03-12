@@ -99,11 +99,16 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> StatementParseResult {
-        if matches!(self.peek_lexeme(), Some(&Lexeme::Print)) {
-            self.advance();
-            self.print_statement()
-        } else {
-            self.expression_statement()
+        match self.peek_lexeme() {
+            Some(&Lexeme::Print) => {
+                self.advance();
+                self.print_statement()
+            }
+            Some(&Lexeme::LeftBrace) => {
+                self.advance();
+                self.block()
+            }
+            _ => self.expression_statement(),
         }
     }
 
@@ -115,6 +120,26 @@ impl<'a> Parser<'a> {
         )?;
 
         Ok(Statement::Print(Box::new(expression)))
+    }
+
+    fn block(&mut self) -> StatementParseResult {
+        let mut statements: Vec<Statement> = Vec::new();
+        loop {
+            match self.peek_lexeme() {
+                None => break,
+                Some(Lexeme::RightBrace) => break,
+                _ => {
+                    statements.push(self.declaration()?);
+                }
+            };
+        }
+
+        self.consume(
+            |l| l == &Lexeme::RightBrace,
+            "Expected '}' after block.".to_owned(),
+        )?;
+
+        Ok(Statement::Block(statements))
     }
 
     fn expression_statement(&mut self) -> StatementParseResult {
@@ -615,6 +640,30 @@ mod tests {
                 name: Token::new(Lexeme::Identifier("foo".to_owned()), 0),
                 value: Box::new(Expression::Literal(Value::Number(5.0)))
             }))))
+        );
+        assert_eq!(parser.next(), None);
+    }
+
+    #[test]
+    fn it_handles_blocks() {
+        let tokens = vec![
+            Token::new(Lexeme::LeftBrace, 0),
+            Token::new(Lexeme::Var, 0),
+            Token::new(Lexeme::Identifier("foo".to_owned()), 0),
+            Token::new(Lexeme::Equal, 0),
+            Token::new(Lexeme::Number(5.0), 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::RightBrace, 0),
+            Token::new(Lexeme::Eof, 0),
+        ];
+        let mut parser = Parser::new(&tokens);
+
+        assert_eq!(
+            parser.next(),
+            Some(Ok(Statement::Block(vec![Statement::Var {
+                name: Token::new(Lexeme::Identifier("foo".to_owned()), 0),
+                initializer: Some(Box::new(Expression::Literal(Value::Number(5.0))))
+            }])))
         );
         assert_eq!(parser.next(), None);
     }

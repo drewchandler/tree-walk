@@ -1,5 +1,5 @@
 use crate::expression::{Expression, ExpressionVisitor, Value};
-use crate::statement::StatementVisitor;
+use crate::statement::{Statement, StatementVisitor};
 use crate::token::Token;
 
 pub struct AstPrinter;
@@ -44,6 +44,16 @@ impl ExpressionVisitor<String> for AstPrinter {
 }
 
 impl StatementVisitor<String> for AstPrinter {
+    fn visit_block(&mut self, statements: &Vec<Statement>) -> String {
+        let statements_string = statements
+            .into_iter()
+            .map(|e| e.accept(self))
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        format!("(block {})", statements_string)
+    }
+
     fn visit_expression(&mut self, expression: &Expression) -> String {
         self.parenthesize(";".to_owned(), &[expression])
     }

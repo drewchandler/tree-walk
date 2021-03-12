@@ -1,47 +1,72 @@
+use std::cell;
 use std::collections;
+use std::rc;
 
 use crate::errors::RuntimeError;
 use crate::expression::Value;
 use crate::token::Token;
 
-pub struct Environment {
-  values: collections::HashMap<String, Value>,
+pub type Environment = rc::Rc<cell::RefCell<EnvironmentData>>;
+
+pub struct EnvironmentData {
+    values: collections::HashMap<String, Value>,
+    enclosing: Option<Environment>,
 }
 
-impl Environment {
-  pub fn new() -> Self {
-    Self {
-      values: collections::HashMap::new(),
+impl EnvironmentData {
+    pub fn new(enclosing: Option<Environment>) -> Self {
+        Self {
+            values: collections::HashMap::new(),
+            enclosing: enclosing,
+        }
     }
-  }
+}
 
-  pub fn define(&mut self, name: &Token, value: Value) {
-    self.values.insert(name.identifier(), value);
-  }
+pub fn env_new(enclosing: Option<&Environment>) -> Environment {
+    rc::Rc::new(cell::RefCell::new(EnvironmentData::new(
+        enclosing.map(|e| e.clone()),
+    )))
+}
 
-  pub fn assign(&mut self, name: &Token, value: Value) -> Result<(), RuntimeError> {
+pub fn env_define(env: &Environment, name: &Token, value: Value) {
+    let mut e = env.borrow_mut();
+
+    e.values.insert(name.identifier(), value);
+}
+
+pub fn env_assign(env: &Environment, name: &Token, value: Value) -> Result<(), RuntimeError> {
+    let mut e = env.borrow_mut();
     let identifier = name.identifier();
 
-    if !self.values.contains_key(&identifier) {
-      return Err(RuntimeError::from_token(
-        name,
-        format!("Undefined variable '{}'.", identifier),
-      ));
+    if !e.values.contains_key(&identifier) {
+        if let Some(ref enclosing) = e.enclosing {
+            return env_assign(enclosing, name, value);
+        } else {
+            return Err(RuntimeError::from_token(
+                name,
+                format!("Undefined variable '{}'.", identifier),
+            ));
+        }
     }
 
-    self.values.insert(identifier, value);
+    e.values.insert(identifier, value);
     Ok(())
-  }
+}
 
-  pub fn get(&self, name: &Token) -> Result<Value, RuntimeError> {
+pub fn env_get(env: &Environment, name: &Token) -> Result<Value, RuntimeError> {
+    let e = env.borrow();
     let identifier = name.identifier();
 
-    self
-      .values
-      .get(&identifier)
-      .map(|v| v.clone())
-      .ok_or_else(|| {
-        RuntimeError::from_token(name, format!("Undefined variable '{}'.", identifier))
-      })
-  }
+    if let Some(value) = e.values.get(&identifier) {
+        Ok(value.clone())
+    } else {
+        if let Some(ref enclosing) = e.enclosing {
+            env_get(enclosing, name)
+        } else {
+            Err(RuntimeError::from_token(
+                name,
+                format!("Undefined variable '{}'.", identifier),
+            ))
+        }
+    }
 }
