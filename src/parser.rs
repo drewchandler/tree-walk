@@ -82,13 +82,13 @@ impl<'a> Parser<'a> {
             "Expected variable name.".to_owned(),
         )?;
 
-        let mut initializer: Option<Box<Expression>> = None;
-
-        if matches!(self.peek_lexeme(), Some(&Lexeme::Equal)) {
+        let initializer = if matches!(self.peek_lexeme(), Some(&Lexeme::Equal)) {
             self.advance();
             let expression = self.expression()?;
-            initializer = Some(Box::new(expression));
-        }
+            Some(Box::new(expression))
+        } else {
+            None
+        };
 
         self.consume(
             |l| l == &Lexeme::Semicolon,
@@ -100,6 +100,10 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> StatementParseResult {
         match self.peek_lexeme() {
+            Some(&Lexeme::If) => {
+                self.advance();
+                self.if_statement()
+            }
             Some(&Lexeme::Print) => {
                 self.advance();
                 self.print_statement()
@@ -110,6 +114,33 @@ impl<'a> Parser<'a> {
             }
             _ => self.expression_statement(),
         }
+    }
+
+    fn if_statement(&mut self) -> StatementParseResult {
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            "Expected '(' after if.".to_owned(),
+        )?;
+        let condition = self.expression().map(|c| Box::new(c))?;
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected '(' after if.".to_owned(),
+        )?;
+
+        let then_branch = self.statement().map(|t| Box::new(t))?;
+
+        let else_branch = if matches!(self.peek_lexeme(), Some(&Lexeme::Else)) {
+            self.advance();
+            self.statement().map(|s| Some(Box::new(s)))?
+        } else {
+            None
+        };
+
+        Ok(Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
     }
 
     fn print_statement(&mut self) -> StatementParseResult {
@@ -664,6 +695,66 @@ mod tests {
                 name: Token::new(Lexeme::Identifier("foo".to_owned()), 0),
                 initializer: Some(Box::new(Expression::Literal(Value::Number(5.0))))
             }])))
+        );
+        assert_eq!(parser.next(), None);
+    }
+
+    #[test]
+    fn it_handles_if_without_else() {
+        let tokens = vec![
+            Token::new(Lexeme::If, 0),
+            Token::new(Lexeme::LeftParen, 0),
+            Token::new(Lexeme::True, 0),
+            Token::new(Lexeme::RightParen, 0),
+            Token::new(Lexeme::Print, 0),
+            Token::new(Lexeme::String("hello".to_owned()), 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Eof, 0),
+        ];
+        let mut parser = Parser::new(&tokens);
+
+        assert_eq!(
+            parser.next(),
+            Some(Ok(Statement::If {
+                condition: Box::new(Expression::Literal(Value::Bool(true))),
+                then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                    Value::String("hello".to_owned())
+                )))),
+                else_branch: None
+            }))
+        );
+        assert_eq!(parser.next(), None);
+    }
+
+    #[test]
+    fn it_handles_if_with_else() {
+        let tokens = vec![
+            Token::new(Lexeme::If, 0),
+            Token::new(Lexeme::LeftParen, 0),
+            Token::new(Lexeme::True, 0),
+            Token::new(Lexeme::RightParen, 0),
+            Token::new(Lexeme::Print, 0),
+            Token::new(Lexeme::String("hello".to_owned()), 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Else, 0),
+            Token::new(Lexeme::Print, 0),
+            Token::new(Lexeme::String("goodbye".to_owned()), 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Eof, 0),
+        ];
+        let mut parser = Parser::new(&tokens);
+
+        assert_eq!(
+            parser.next(),
+            Some(Ok(Statement::If {
+                condition: Box::new(Expression::Literal(Value::Bool(true))),
+                then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                    Value::String("hello".to_owned())
+                )))),
+                else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                    Value::String("goodbye".to_owned())
+                ))))),
+            }))
         );
         assert_eq!(parser.next(), None);
     }

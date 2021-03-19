@@ -58,6 +58,28 @@ impl StatementVisitor<String> for AstPrinter {
         self.parenthesize(";".to_owned(), &[expression])
     }
 
+    fn visit_if(
+        &mut self,
+        condition: &Expression,
+        then_branch: &Statement,
+        else_branch: Option<&Statement>,
+    ) -> String {
+        if let Some(e) = else_branch {
+            format!(
+                "(if-else {} {} {})",
+                condition.accept(self),
+                then_branch.accept(self),
+                e.accept(self)
+            )
+        } else {
+            format!(
+                "(if {} {})",
+                condition.accept(self),
+                then_branch.accept(self)
+            )
+        }
+    }
+
     fn visit_print(&mut self, expression: &Expression) -> String {
         self.parenthesize("print".to_owned(), &[expression])
     }

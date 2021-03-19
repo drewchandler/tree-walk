@@ -128,13 +128,28 @@ impl<'a> StatementVisitor<InterpreterResult> for Interpreter<'a> {
             s.accept(&mut block_interpreter)?;
         }
 
-        return Ok(Value::Nil);
+        Ok(Value::Nil)
     }
 
     fn visit_expression(&mut self, expression: &Expression) -> InterpreterResult {
         self.evaluate(expression)?;
 
-        return Ok(Value::Nil);
+        Ok(Value::Nil)
+    }
+
+    fn visit_if(
+        &mut self,
+        condition: &Expression,
+        then_branch: &Statement,
+        else_branch: Option<&Statement>,
+    ) -> InterpreterResult {
+        if self.evaluate(condition)?.is_truthy() {
+            then_branch.accept(self)?;
+        } else if let Some(e) = else_branch {
+            e.accept(self)?;
+        };
+
+        Ok(Value::Nil)
     }
 
     fn visit_print(&mut self, expression: &Expression) -> InterpreterResult {
@@ -142,7 +157,7 @@ impl<'a> StatementVisitor<InterpreterResult> for Interpreter<'a> {
 
         write!(&mut self.output, "{}\n", value).unwrap();
 
-        return Ok(Value::Nil);
+        Ok(Value::Nil)
     }
 
     fn visit_var(&mut self, name: &Token, initializer: Option<&Expression>) -> InterpreterResult {
@@ -155,7 +170,7 @@ impl<'a> StatementVisitor<InterpreterResult> for Interpreter<'a> {
 
         env_define(&self.environment, name, value);
 
-        return Ok(Value::Nil);
+        Ok(Value::Nil)
     }
 }
 
@@ -632,5 +647,77 @@ mod tests {
         );
 
         assert_eq!(output, b"10\n5\n");
+    }
+
+    #[test]
+    fn it_handles_an_if_with_a_truthy_condition() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Literal(Value::Bool(true))),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("here".to_owned()),
+            )))),
+            else_branch: None,
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"here\n");
+    }
+
+    #[test]
+    fn it_handles_an_if_with_a_falsey_condition() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Literal(Value::Bool(false))),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("here".to_owned()),
+            )))),
+            else_branch: None,
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"");
+    }
+
+    #[test]
+    fn it_handles_an_if_plus_else_with_a_truthy_condition() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Literal(Value::Bool(true))),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"then\n");
+    }
+
+    #[test]
+    fn it_handles_an_if_plus_else_with_a_falsey_condition() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Literal(Value::Bool(false))),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"else\n");
     }
 }

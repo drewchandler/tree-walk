@@ -24,7 +24,7 @@ impl Value {
             &Self::Nil => "nil".to_owned(),
             &Self::Bool(b) => b.to_string(),
             &Self::Number(n) => n.to_string(),
-            &Self::String(ref s) => format!("\"{}\"", s),
+            &Self::String(ref s) => s.clone(),
         }
     }
 }
