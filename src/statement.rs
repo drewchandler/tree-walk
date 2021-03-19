@@ -15,6 +15,10 @@ pub enum Statement {
         name: Token,
         initializer: Option<Box<Expression>>,
     },
+    While {
+        condition: Box<Expression>,
+        body: Box<Statement>,
+    },
 }
 
 impl Statement {
@@ -32,6 +36,10 @@ impl Statement {
                 ref name,
                 initializer,
             } => visitor.visit_var(name, initializer.as_deref()),
+            &Self::While {
+                ref condition,
+                ref body,
+            } => visitor.visit_while(condition, body),
         }
     }
 }
@@ -47,4 +55,5 @@ pub trait StatementVisitor<T> {
     fn visit_expression(&mut self, expression: &Expression) -> T;
     fn visit_print(&mut self, expression: &Expression) -> T;
     fn visit_var(&mut self, name: &Token, initializer: Option<&Expression>) -> T;
+    fn visit_while(&mut self, condition: &Expression, body: &Statement) -> T;
 }

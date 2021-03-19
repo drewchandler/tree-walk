@@ -108,6 +108,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.print_statement()
             }
+            Some(&Lexeme::While) => {
+                self.advance();
+                self.while_statement()
+            }
             Some(&Lexeme::LeftBrace) => {
                 self.advance();
                 self.block()
@@ -121,13 +125,13 @@ impl<'a> Parser<'a> {
             |l| l == &Lexeme::LeftParen,
             "Expected '(' after if.".to_owned(),
         )?;
-        let condition = self.expression().map(|c| Box::new(c))?;
+        let condition = self.expression()?;
         self.consume(
             |l| l == &Lexeme::RightParen,
             "Expected '(' after if.".to_owned(),
         )?;
 
-        let then_branch = self.statement().map(|t| Box::new(t))?;
+        let then_branch = self.statement()?;
 
         let else_branch = if matches!(self.peek_lexeme(), Some(&Lexeme::Else)) {
             self.advance();
@@ -137,8 +141,8 @@ impl<'a> Parser<'a> {
         };
 
         Ok(Statement::If {
-            condition,
-            then_branch,
+            condition: Box::new(condition),
+            then_branch: Box::new(then_branch),
             else_branch,
         })
     }
@@ -151,6 +155,24 @@ impl<'a> Parser<'a> {
         )?;
 
         Ok(Statement::Print(Box::new(expression)))
+    }
+
+    fn while_statement(&mut self) -> StatementParseResult {
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            "Expected '(' after while.".to_owned(),
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after condition.".to_owned(),
+        )?;
+        let body = self.statement()?;
+
+        Ok(Statement::While {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        })
     }
 
     fn block(&mut self) -> StatementParseResult {
@@ -212,12 +234,12 @@ impl<'a> Parser<'a> {
 
         while matches!(self.peek_lexeme(), Some(&Lexeme::Or)) {
             let operator = self.advance().unwrap();
-            let right = self.and().map(|a| Box::new(a))?;
+            let right = self.and()?;
 
             expr = Expression::Logical {
                 left: Box::new(expr),
                 operator,
-                right,
+                right: Box::new(right),
             };
         }
 
@@ -229,12 +251,12 @@ impl<'a> Parser<'a> {
 
         while matches!(self.peek_lexeme(), Some(&Lexeme::Or)) {
             let operator = self.advance().unwrap();
-            let right = self.equality().map(|a| Box::new(a))?;
+            let right = self.equality()?;
 
             expr = Expression::Logical {
                 left: Box::new(expr),
                 operator,
-                right,
+                right: Box::new(right),
             };
         }
 
@@ -249,12 +271,12 @@ impl<'a> Parser<'a> {
             Some(&Lexeme::BangEqual) | Some(&Lexeme::EqualEqual)
         ) {
             let operator = self.advance().unwrap();
-            let right = self.comparision().map(|c| Box::new(c))?;
+            let right = self.comparision()?;
 
             expr = Expression::Binary {
                 left: Box::new(expr),
                 operator: operator,
-                right,
+                right: Box::new(right),
             };
         }
 

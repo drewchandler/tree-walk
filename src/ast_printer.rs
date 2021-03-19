@@ -96,6 +96,10 @@ impl StatementVisitor<String> for AstPrinter {
             None => format!("(var {})", name.identifier()),
         }
     }
+
+    fn visit_while(&mut self, condition: &Expression, body: &Statement) -> String {
+        format!("(while {} {})", condition.accept(self), body.accept(self))
+    }
 }
 
 #[cfg(test)]

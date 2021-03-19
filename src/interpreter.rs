@@ -202,6 +202,14 @@ impl<'a> StatementVisitor<InterpreterResult> for Interpreter<'a> {
 
         Ok(Value::Nil)
     }
+
+    fn visit_while(&mut self, condition: &Expression, body: &Statement) -> InterpreterResult {
+        while self.evaluate(condition)?.is_truthy() {
+            body.accept(self)?;
+        }
+
+        Ok(Value::Nil)
+    }
 }
 
 fn check_number_operand(operator: &Token, operand: Value) -> Result<f64, RuntimeError> {
