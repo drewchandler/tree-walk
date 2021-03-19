@@ -34,6 +34,10 @@ impl ExpressionVisitor<String> for AstPrinter {
         value.to_string()
     }
 
+    fn visit_logical(&mut self, left: &Expression, operator: &Token, right: &Expression) -> String {
+        self.parenthesize(operator.to_string(), &[left, right])
+    }
+
     fn visit_unary(&mut self, operator: &Token, expression: &Expression) -> String {
         self.parenthesize(operator.to_string(), &[expression])
     }

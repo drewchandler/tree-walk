@@ -98,6 +98,36 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
         Ok(value.clone())
     }
 
+    fn visit_logical(
+        &mut self,
+        left: &Expression,
+        operator: &Token,
+        right: &Expression,
+    ) -> InterpreterResult {
+        let left_value = self.evaluate(left)?;
+
+        match operator.lexeme {
+            Lexeme::Or => {
+                if left_value.is_truthy() {
+                    Ok(left_value)
+                } else {
+                    self.evaluate(right).map(|r| Ok(r))?
+                }
+            }
+            Lexeme::And => {
+                if left_value.is_truthy() {
+                    self.evaluate(right).map(|r| Ok(r))?
+                } else {
+                    Ok(left_value)
+                }
+            }
+            _ => Err(RuntimeError::from_token(
+                operator,
+                "Invalid logical operator.".to_owned(),
+            )),
+        }
+    }
+
     fn visit_unary(&mut self, operator: &Token, expression: &Expression) -> InterpreterResult {
         let operand = self.evaluate(expression)?;
 
@@ -719,5 +749,143 @@ mod tests {
 
         assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
         assert_eq!(output, b"else\n");
+    }
+
+    #[test]
+    fn if_handles_or_with_truthy_left() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(true))),
+                operator: Token::new(Lexeme::Or, 1),
+                right: Box::new(Expression::Literal(Value::Bool(false))),
+            }),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"then\n");
+    }
+
+    #[test]
+    fn if_handles_or_with_truthy_right() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(false))),
+                operator: Token::new(Lexeme::Or, 1),
+                right: Box::new(Expression::Literal(Value::Bool(true))),
+            }),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"then\n");
+    }
+
+    #[test]
+    fn if_handles_or_with_everything_falsey() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(false))),
+                operator: Token::new(Lexeme::Or, 1),
+                right: Box::new(Expression::Literal(Value::Bool(false))),
+            }),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"else\n");
+    }
+
+    #[test]
+    fn if_handles_and_with_truthy_left() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(true))),
+                operator: Token::new(Lexeme::And, 1),
+                right: Box::new(Expression::Literal(Value::Bool(false))),
+            }),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"else\n");
+    }
+
+    #[test]
+    fn if_handles_and_with_truthy_right() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(false))),
+                operator: Token::new(Lexeme::And, 1),
+                right: Box::new(Expression::Literal(Value::Bool(true))),
+            }),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"else\n");
+    }
+
+    #[test]
+    fn if_handles_and_with_everything_truthy() {
+        let mut output = Vec::new();
+        let mut interpreter = Interpreter::new(&mut output);
+
+        let if_statement = Statement::If {
+            condition: Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(true))),
+                operator: Token::new(Lexeme::And, 1),
+                right: Box::new(Expression::Literal(Value::Bool(true))),
+            }),
+            then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("then".to_owned()),
+            )))),
+            else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                Value::String("else".to_owned()),
+            ))))),
+        };
+
+        assert_eq!(if_statement.accept(&mut interpreter), Ok(Value::Nil));
+        assert_eq!(output, b"then\n");
     }
 }

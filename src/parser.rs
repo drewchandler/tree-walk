@@ -188,7 +188,7 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> ExpressionParseResult {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if matches!(self.peek_lexeme(), Some(&Lexeme::Equal)) {
             let equals = self.advance().unwrap();
@@ -207,6 +207,40 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
+    fn or(&mut self) -> ExpressionParseResult {
+        let mut expr = self.and()?;
+
+        while matches!(self.peek_lexeme(), Some(&Lexeme::Or)) {
+            let operator = self.advance().unwrap();
+            let right = self.and().map(|a| Box::new(a))?;
+
+            expr = Expression::Logical {
+                left: Box::new(expr),
+                operator,
+                right,
+            };
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ExpressionParseResult {
+        let mut expr = self.equality()?;
+
+        while matches!(self.peek_lexeme(), Some(&Lexeme::Or)) {
+            let operator = self.advance().unwrap();
+            let right = self.equality().map(|a| Box::new(a))?;
+
+            expr = Expression::Logical {
+                left: Box::new(expr),
+                operator,
+                right,
+            };
+        }
+
+        Ok(expr)
+    }
+
     fn equality(&mut self) -> ExpressionParseResult {
         let mut expr = self.comparision()?;
 
@@ -215,12 +249,12 @@ impl<'a> Parser<'a> {
             Some(&Lexeme::BangEqual) | Some(&Lexeme::EqualEqual)
         ) {
             let operator = self.advance().unwrap();
-            let right = self.comparision()?;
+            let right = self.comparision().map(|c| Box::new(c))?;
 
             expr = Expression::Binary {
                 left: Box::new(expr),
                 operator: operator,
-                right: Box::new(right),
+                right,
             };
         }
 
@@ -534,6 +568,28 @@ mod tests {
                 left: Box::new(Expression::Literal(Value::Number(2.0))),
                 operator: Token::new(Lexeme::Minus, 0),
                 right: Box::new(Expression::Literal(Value::Number(12.0)))
+            }))))
+        );
+        assert_eq!(parser.next(), None);
+    }
+
+    #[test]
+    fn it_handles_logical_expressions() {
+        let tokens = vec![
+            Token::new(Lexeme::True, 0),
+            Token::new(Lexeme::Or, 0),
+            Token::new(Lexeme::False, 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Eof, 0),
+        ];
+        let mut parser = Parser::new(&tokens);
+
+        assert_eq!(
+            parser.next(),
+            Some(Ok(Statement::Expression(Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(true))),
+                operator: Token::new(Lexeme::Or, 0),
+                right: Box::new(Expression::Literal(Value::Bool(false)))
             }))))
         );
         assert_eq!(parser.next(), None);

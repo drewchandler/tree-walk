@@ -48,6 +48,11 @@ pub enum Expression {
     },
     Grouping(Box<Expression>),
     Literal(Value),
+    Logical {
+        left: Box<Expression>,
+        operator: Token,
+        right: Box<Expression>,
+    },
     Unary {
         operator: Token,
         expression: Box<Expression>,
@@ -68,6 +73,11 @@ impl Expression {
             } => visitor.visit_binary(left, operator, right),
             Self::Grouping(ref e) => visitor.visit_grouping(e),
             Self::Literal(ref value) => visitor.visit_literal(value),
+            Self::Logical {
+                ref left,
+                ref operator,
+                ref right,
+            } => visitor.visit_logical(left, operator, right),
             Self::Unary {
                 ref operator,
                 ref expression,
@@ -82,6 +92,7 @@ pub trait ExpressionVisitor<T> {
     fn visit_binary(&mut self, left: &Expression, operator: &Token, right: &Expression) -> T;
     fn visit_grouping(&mut self, expression: &Expression) -> T;
     fn visit_literal(&mut self, value: &Value) -> T;
+    fn visit_logical(&mut self, left: &Expression, operator: &Token, right: &Expression) -> T;
     fn visit_unary(&mut self, operator: &Token, expression: &Expression) -> T;
     fn visit_variable(&mut self, name: &Token) -> T;
 }
