@@ -1,3 +1,12 @@
+mod lexer;
+mod parser;
+mod interpreter;
+mod visitor;
+
+use lexer::Scanner;
+use parser::Parser;
+use interpreter::Interpreter;
+
 use std::env;
 use std::fmt;
 use std::fs;
@@ -14,7 +23,7 @@ fn main() -> TWResult<()> {
         0 => run_prompt(),
         1 => run_file(&args[0]),
         _ => {
-            println!("Usage: tree-walk [script]");
+            eprintln!("Usage: tree-walk [script]");
             process::exit(64);
         }
     }
@@ -43,9 +52,13 @@ fn run_file<P: AsRef<path::Path> + fmt::Display>(filename: P) -> TWResult<()> {
 }
 
 fn run(source: String) -> TWResult<()> {
-    for token in source.split(" ") {
-        println!("{}", token);
-    }
+    let tokens = Scanner::new(source).collect();
+
+    let mut parser = Parser::new(tokens); // vec![token1, token2]
+    let stmts = parser.parse();
+    let mut interp = Interpreter::new();
+    let res = interp.start(stmts);
+    eprintln!("{:?}", res);
 
     Ok(())
 }
