@@ -100,6 +100,10 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> StatementParseResult {
         match self.peek_lexeme() {
+            Some(&Lexeme::For) => {
+                self.advance();
+                self.for_statement()
+            }
             Some(&Lexeme::If) => {
                 self.advance();
                 self.if_statement()
@@ -118,6 +122,63 @@ impl<'a> Parser<'a> {
             }
             _ => self.expression_statement(),
         }
+    }
+
+    fn for_statement(&mut self) -> StatementParseResult {
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            "Expected '(' after for.".to_owned(),
+        )?;
+
+        let initializer = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
+            self.advance();
+            None
+        } else if matches!(self.peek_lexeme(), Some(&Lexeme::Var)) {
+            self.advance();
+            self.var_declaration().map(|v| Some(v))?
+        } else {
+            self.expression_statement().map(|v| Some(v))?
+        };
+
+        let condition = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
+            None
+        } else {
+            self.expression().map(|c| Some(Box::new(c)))?
+        };
+
+        self.consume(
+            |l| l == &Lexeme::Semicolon,
+            "Expected ';' after loop condition.".to_owned(),
+        )?;
+
+        let increment = if matches!(self.peek_lexeme(), Some(&Lexeme::RightParen)) {
+            None
+        } else {
+            self.expression().map(|i| Some(Box::new(i)))?
+        };
+
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after for clauses.".to_owned(),
+        )?;
+
+        let mut body = self.statement()?;
+
+        if let Some(i) = increment {
+            body = Statement::Block(vec![body, Statement::Expression(i)]);
+        }
+
+        body = Statement::While {
+            condition: condition
+                .unwrap_or_else(|| Box::new(Expression::Literal(Value::Bool(true)))),
+            body: Box::new(body),
+        };
+
+        if let Some(i) = initializer {
+            body = Statement::Block(vec![i, body]);
+        }
+
+        Ok(body)
     }
 
     fn if_statement(&mut self) -> StatementParseResult {

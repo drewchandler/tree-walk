@@ -83,9 +83,35 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
                     "Operands must be two numbers or two strings.".to_owned(),
                 )),
             },
-            _ => Err(RuntimeError::from_token(
+            Lexeme::Less => {
+                let left_numeric = check_number_operand(operator, left_value)?;
+                let right_numeric = check_number_operand(operator, right_value)?;
+
+                Ok(Value::Bool(left_numeric < right_numeric))
+            }
+            Lexeme::LessEqual => {
+                let left_numeric = check_number_operand(operator, left_value)?;
+                let right_numeric = check_number_operand(operator, right_value)?;
+
+                Ok(Value::Bool(left_numeric <= right_numeric))
+            }
+            Lexeme::Greater => {
+                let left_numeric = check_number_operand(operator, left_value)?;
+                let right_numeric = check_number_operand(operator, right_value)?;
+
+                Ok(Value::Bool(left_numeric > right_numeric))
+            }
+            Lexeme::GreaterEqual => {
+                let left_numeric = check_number_operand(operator, left_value)?;
+                let right_numeric = check_number_operand(operator, right_value)?;
+
+                Ok(Value::Bool(left_numeric >= right_numeric))
+            }
+            Lexeme::EqualEqual => Ok(Value::Bool(left_value == right_value)),
+            Lexeme::BangEqual => Ok(Value::Bool(left_value != right_value)),
+            ref l => Err(RuntimeError::from_token(
                 operator,
-                "Invalid binary operator.".to_owned(),
+                format!("Invalid binary operator '{:?}'.", l),
             )),
         }
     }
