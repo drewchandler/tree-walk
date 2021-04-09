@@ -1,12 +1,12 @@
 use std::io;
 
-use crate::environment::{env_assign, env_define, env_get, env_new, Environment};
+use crate::environment::{env_assign, env_define, env_get, env_new, env_root, Environment};
 use crate::errors::RuntimeError;
 use crate::expression::{Expression, ExpressionVisitor, Value};
 use crate::statement::{Statement, StatementVisitor};
 use crate::token::{Lexeme, Token};
 
-type InterpreterResult = Result<Value, RuntimeError>;
+pub type InterpreterResult = Result<Value, RuntimeError>;
 
 pub struct Interpreter<'a> {
     output: &'a mut dyn io::Write,
@@ -22,7 +22,7 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn new(output: &'a mut dyn io::Write) -> Self {
-        Self::new_with_environment(output, env_new(None))
+        Self::new_with_environment(output, env_root())
     }
 
     pub fn execute(&mut self, statement: &Statement) -> InterpreterResult {
@@ -112,6 +112,40 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
             ref l => Err(RuntimeError::from_token(
                 operator,
                 format!("Invalid binary operator '{:?}'.", l),
+            )),
+        }
+    }
+
+    fn visit_call(
+        &mut self,
+        callee: &Expression,
+        paren: &Token,
+        arguments: &Vec<Expression>,
+    ) -> InterpreterResult {
+        let callee_value = self.evaluate(callee)?;
+        let argument_values = arguments
+            .iter()
+            .map(|a| self.evaluate(a))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        match callee_value {
+            Value::Callable(ref c) => {
+                if c.arity() != argument_values.len() {
+                    return Err(RuntimeError::from_token(
+                        paren,
+                        format!(
+                            "Expected {} arguments but got {}.",
+                            c.arity(),
+                            argument_values.len()
+                        ),
+                    ));
+                }
+
+                c.call(self, argument_values)
+            }
+            _ => Err(RuntimeError::from_token(
+                paren,
+                "Can only call functions and classes".to_owned(),
             )),
         }
     }

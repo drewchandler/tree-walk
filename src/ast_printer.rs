@@ -26,6 +26,21 @@ impl ExpressionVisitor<String> for AstPrinter {
         self.parenthesize(operator.to_string(), &[left, right])
     }
 
+    fn visit_call(
+        &mut self,
+        callee: &Expression,
+        _paren: &Token,
+        arguments: &Vec<Expression>,
+    ) -> String {
+        let arguments_string = arguments
+            .into_iter()
+            .map(|e| e.accept(self))
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        format!("(call {} {})", callee.accept(self), arguments_string)
+    }
+
     fn visit_grouping(&mut self, expression: &Expression) -> String {
         self.parenthesize("group".to_owned(), &[expression])
     }

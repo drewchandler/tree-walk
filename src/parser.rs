@@ -10,6 +10,7 @@ use crate::token::{Lexeme, Token};
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseError {
     InvalidAssignmentTarget { token: Token },
+    TooManyArguments { token: Token },
     UnexpectedToken { token: Token, message: String },
     UnexpectedEnd,
 }
@@ -17,6 +18,10 @@ pub enum ParseError {
 impl ParseError {
     fn invalid_assignment_target(token: Token) -> Self {
         Self::InvalidAssignmentTarget { token }
+    }
+
+    fn too_many_arguments(token: Token) -> Self {
+        Self::TooManyArguments { token }
     }
 
     fn unexpected_token(token: Token, message: String) -> Self {
@@ -29,10 +34,15 @@ impl fmt::Display for ParseError {
         match self {
             Self::InvalidAssignmentTarget { token } => write!(
                 f,
-                "[line {}] at '{}' {}",
+                "[line {}] at '{}' Invalid assignment target",
                 token.line,
                 token.to_string(),
-                "Invalid assignment target"
+            ),
+            Self::TooManyArguments { token } => write!(
+                f,
+                "[line {}] at '{}' Can't have more than 255 arguments",
+                token.line,
+                token.to_string(),
             ),
             Self::UnexpectedToken { token, message } => write!(
                 f,
@@ -421,7 +431,53 @@ impl<'a> Parser<'a> {
             });
         }
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> ExpressionParseResult {
+        let mut expr = self.primary()?;
+
+        loop {
+            if matches!(self.peek_lexeme(), Some(&Lexeme::LeftParen)) {
+                self.advance().unwrap();
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expression) -> ExpressionParseResult {
+        let mut arguments = Vec::new();
+
+        if !matches!(self.peek_lexeme(), Some(&Lexeme::RightParen)) {
+            loop {
+                if arguments.len() >= 255 {
+                    return Err(ParseError::too_many_arguments(self.peek().unwrap()));
+                }
+
+                arguments.push(self.expression()?);
+
+                if matches!(self.peek_lexeme(), Some(&Lexeme::Comma)) {
+                    self.advance().unwrap();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after arguments.".to_owned(),
+        )?;
+
+        Ok(Expression::Call {
+            callee: Box::new(callee),
+            paren,
+            arguments,
+        })
     }
 
     fn primary(&mut self) -> ExpressionParseResult {
@@ -475,6 +531,10 @@ impl<'a> Parser<'a> {
 
     fn advance(&mut self) -> Option<Token> {
         self.tokens.next().map(|t| t.clone())
+    }
+
+    fn peek(&mut self) -> Option<Token> {
+        self.tokens.peek().map(|t| t.clone().to_owned())
     }
 
     fn peek_lexeme(&mut self) -> Option<&Lexeme> {

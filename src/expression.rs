@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::callable::Callable;
 use crate::token::Token;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -7,6 +8,7 @@ pub enum Value {
     String(String),
     Number(f64),
     Bool(bool),
+    Callable(Callable),
     Nil,
 }
 
@@ -23,6 +25,7 @@ impl Value {
         match self {
             &Self::Nil => "nil".to_owned(),
             &Self::Bool(b) => b.to_string(),
+            &Self::Callable(ref c) => c.to_string(),
             &Self::Number(n) => n.to_string(),
             &Self::String(ref s) => s.clone(),
         }
@@ -45,6 +48,11 @@ pub enum Expression {
         left: Box<Expression>,
         operator: Token,
         right: Box<Expression>,
+    },
+    Call {
+        callee: Box<Expression>,
+        paren: Token,
+        arguments: Vec<Expression>,
     },
     Grouping(Box<Expression>),
     Literal(Value),
@@ -71,6 +79,11 @@ impl Expression {
                 ref operator,
                 ref right,
             } => visitor.visit_binary(left, operator, right),
+            Self::Call {
+                ref callee,
+                ref paren,
+                ref arguments,
+            } => visitor.visit_call(callee, paren, arguments),
             Self::Grouping(ref e) => visitor.visit_grouping(e),
             Self::Literal(ref value) => visitor.visit_literal(value),
             Self::Logical {
@@ -90,6 +103,7 @@ impl Expression {
 pub trait ExpressionVisitor<T> {
     fn visit_assign(&mut self, name: &Token, value: &Expression) -> T;
     fn visit_binary(&mut self, left: &Expression, operator: &Token, right: &Expression) -> T;
+    fn visit_call(&mut self, callee: &Expression, paren: &Token, arguments: &Vec<Expression>) -> T;
     fn visit_grouping(&mut self, expression: &Expression) -> T;
     fn visit_literal(&mut self, value: &Value) -> T;
     fn visit_logical(&mut self, left: &Expression, operator: &Token, right: &Expression) -> T;
