@@ -5,6 +5,11 @@ use crate::token::Token;
 pub enum Statement {
     Block(Vec<Statement>),
     Expression(Box<Expression>),
+    Function {
+        name: Token,
+        params: Vec<Token>,
+        body: Box<Statement>,
+    },
     If {
         condition: Box<Expression>,
         then_branch: Box<Statement>,
@@ -25,12 +30,17 @@ impl Statement {
     pub fn accept<T>(&self, visitor: &mut dyn StatementVisitor<T>) -> T {
         match &self {
             &Self::Block(ss) => visitor.visit_block(ss),
+            &Self::Expression(ref e) => visitor.visit_expression(e),
+            &Self::Function {
+                ref name,
+                ref params,
+                ref body,
+            } => visitor.visit_function(name, params, body),
             &Self::If {
                 ref condition,
                 ref then_branch,
                 else_branch,
             } => visitor.visit_if(condition, then_branch, else_branch.as_deref()),
-            &Self::Expression(ref e) => visitor.visit_expression(e),
             &Self::Print(ref e) => visitor.visit_print(e),
             &Self::Var {
                 ref name,
@@ -46,13 +56,14 @@ impl Statement {
 
 pub trait StatementVisitor<T> {
     fn visit_block(&mut self, statements: &Vec<Statement>) -> T;
+    fn visit_expression(&mut self, expression: &Expression) -> T;
+    fn visit_function(&mut self, name: &Token, params: &Vec<Token>, body: &Box<Statement>) -> T;
     fn visit_if(
         &mut self,
         condition: &Expression,
         then_branch: &Statement,
         else_branch: Option<&Statement>,
     ) -> T;
-    fn visit_expression(&mut self, expression: &Expression) -> T;
     fn visit_print(&mut self, expression: &Expression) -> T;
     fn visit_var(&mut self, name: &Token, initializer: Option<&Expression>) -> T;
     fn visit_while(&mut self, condition: &Expression, body: &Statement) -> T;

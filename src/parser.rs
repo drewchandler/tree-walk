@@ -75,20 +75,68 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> StatementParseResult {
-        if matches!(self.peek_lexeme(), Some(&Lexeme::Var)) {
-            self.advance();
-            self.var_declaration()
-        } else {
-            self.statement()
+        match self.peek_lexeme() {
+            Some(&Lexeme::Fun) => {
+                self.advance();
+                self.function("function")
+            }
+            Some(&Lexeme::Var) => {
+                self.advance();
+                self.var_declaration()
+            }
+            _ => self.statement(),
         }
+    }
+
+    fn function(&mut self, kind: &str) -> StatementParseResult {
+        let name = self.consume(
+            |l| matches!(l, &Lexeme::Identifier(_)),
+            format!("Expected {} name.", kind),
+        )?;
+
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            format!("Expected '(' after {} name.", kind),
+        )?;
+
+        let mut params = vec![];
+        if self.peek_lexeme() != Some(&Lexeme::RightParen) {
+            loop {
+                params.push(self.consume(
+                    |l| matches!(l, &Lexeme::Identifier(_)),
+                    "Expected parameter name".to_owned(),
+                )?);
+
+                if self.peek_lexeme() != Some(&Lexeme::Comma) {
+                    break;
+                }
+
+                self.advance().unwrap();
+            }
+        }
+
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after parameters.".to_owned(),
+        )?;
+
+        self.consume(
+            |l| l == &Lexeme::LeftBrace,
+            format!("Expected '{{' before {} body.", kind),
+        )?;
+
+        let body = self.block()?;
+
+        Ok(Statement::Function {
+            name,
+            params,
+            body: Box::new(body),
+        })
     }
 
     fn var_declaration(&mut self) -> StatementParseResult {
         let name = self.consume(
-            |l| match l {
-                &Lexeme::Identifier(_) => true,
-                _ => false,
-            },
+            |l| matches!(l, &Lexeme::Identifier(_)),
             "Expected variable name.".to_owned(),
         )?;
 
@@ -140,14 +188,16 @@ impl<'a> Parser<'a> {
             "Expected '(' after for.".to_owned(),
         )?;
 
-        let initializer = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
-            self.advance();
-            None
-        } else if matches!(self.peek_lexeme(), Some(&Lexeme::Var)) {
-            self.advance();
-            self.var_declaration().map(|v| Some(v))?
-        } else {
-            self.expression_statement().map(|v| Some(v))?
+        let initializer = match self.peek_lexeme() {
+            Some(&Lexeme::Semicolon) => {
+                self.advance();
+                None
+            }
+            Some(&Lexeme::Var) => {
+                self.advance();
+                self.var_declaration().map(|v| Some(v))?
+            }
+            _ => self.expression_statement().map(|v| Some(v))?,
         };
 
         let condition = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {

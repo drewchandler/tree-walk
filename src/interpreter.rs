@@ -1,5 +1,6 @@
 use std::io;
 
+use crate::callable::Callable;
 use crate::environment::{env_assign, env_define, env_get, env_new, env_root, Environment};
 use crate::errors::RuntimeError;
 use crate::expression::{Expression, ExpressionVisitor, Value};
@@ -9,8 +10,8 @@ use crate::token::{Lexeme, Token};
 pub type InterpreterResult = Result<Value, RuntimeError>;
 
 pub struct Interpreter<'a> {
-    output: &'a mut dyn io::Write,
-    environment: Environment,
+    pub output: &'a mut dyn io::Write,
+    pub environment: Environment,
 }
 
 impl<'a> Interpreter<'a> {
@@ -223,6 +224,25 @@ impl<'a> StatementVisitor<InterpreterResult> for Interpreter<'a> {
 
     fn visit_expression(&mut self, expression: &Expression) -> InterpreterResult {
         self.evaluate(expression)?;
+
+        Ok(Value::Nil)
+    }
+
+    fn visit_function(
+        &mut self,
+        name: &Token,
+        params: &Vec<Token>,
+        body: &Box<Statement>,
+    ) -> InterpreterResult {
+        env_define(
+            &self.environment,
+            name,
+            Value::Callable(Callable::UserDefined {
+                name: name.identifier(),
+                params: params.clone(),
+                body: body.clone(),
+            }),
+        );
 
         Ok(Value::Nil)
     }

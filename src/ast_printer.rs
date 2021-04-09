@@ -77,6 +77,24 @@ impl StatementVisitor<String> for AstPrinter {
         self.parenthesize(";".to_owned(), &[expression])
     }
 
+    fn visit_function(
+        &mut self,
+        name: &Token,
+        params: &Vec<Token>,
+        body: &Box<Statement>,
+    ) -> String {
+        format!(
+            "(fun {} ({}) {})",
+            name.identifier(),
+            params
+                .into_iter()
+                .map(|p| p.identifier())
+                .collect::<Vec<String>>()
+                .join(" "),
+            body.accept(self)
+        )
+    }
+
     fn visit_if(
         &mut self,
         condition: &Expression,
