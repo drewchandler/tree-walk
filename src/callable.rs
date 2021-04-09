@@ -1,9 +1,8 @@
-use crate::environment::env_define;
 use std::fmt;
 
-use crate::environment::env_new;
+use crate::environment::{env_define, env_new, Environment};
 use crate::expression::Value;
-use crate::interpreter::{Interpreter, InterpreterResult};
+use crate::interpreter::{ErrorOrReturn, Interpreter, InterpreterResult};
 use crate::statement::Statement;
 use crate::token::Token;
 
@@ -17,6 +16,7 @@ pub enum Callable {
         name: String,
         params: Vec<Token>,
         body: Box<Statement>,
+        closure: Environment,
     },
 }
 
@@ -35,8 +35,13 @@ impl Callable {
     ) -> InterpreterResult {
         match self {
             Self::BuiltIn { func, .. } => func(interpreter, arguments),
-            Self::UserDefined { params, body, .. } => {
-                let call_env = env_new(Some(&interpreter.environment));
+            Self::UserDefined {
+                params,
+                body,
+                closure,
+                ..
+            } => {
+                let call_env = env_new(Some(&closure));
 
                 for (p, a) in params.iter().zip(arguments.iter()) {
                     env_define(&call_env, p, a.clone());
@@ -45,7 +50,10 @@ impl Callable {
                 let mut block_interpreter =
                     Interpreter::new_with_environment(interpreter.output, call_env);
 
-                block_interpreter.execute(body)
+                match block_interpreter.execute(body) {
+                    Err(ErrorOrReturn::Return(v)) => Ok(v),
+                    e => e,
+                }
             }
         }
     }

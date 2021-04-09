@@ -121,6 +121,14 @@ impl StatementVisitor<String> for AstPrinter {
         self.parenthesize("print".to_owned(), &[expression])
     }
 
+    fn visit_return(&mut self, expression: Option<&Expression>) -> String {
+        if let Some(e) = expression {
+            self.parenthesize("return".to_owned(), &[e])
+        } else {
+            "(return)".to_owned()
+        }
+    }
+
     fn visit_var(&mut self, name: &Token, initializer: Option<&Expression>) -> String {
         match initializer {
             Some(expression) => {

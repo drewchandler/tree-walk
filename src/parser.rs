@@ -170,6 +170,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.print_statement()
             }
+            Some(&Lexeme::Return) => {
+                self.advance();
+                self.return_statement()
+            }
             Some(&Lexeme::While) => {
                 self.advance();
                 self.while_statement()
@@ -276,6 +280,21 @@ impl<'a> Parser<'a> {
         )?;
 
         Ok(Statement::Print(Box::new(expression)))
+    }
+
+    fn return_statement(&mut self) -> StatementParseResult {
+        let expression = if !matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
+            Some(Box::new(self.expression()?))
+        } else {
+            None
+        };
+
+        self.consume(
+            |l| l == &Lexeme::Semicolon,
+            "Expected ';' after return value.".to_owned(),
+        )?;
+
+        Ok(Statement::Return(expression))
     }
 
     fn while_statement(&mut self) -> StatementParseResult {

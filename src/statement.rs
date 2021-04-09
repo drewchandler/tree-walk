@@ -16,6 +16,7 @@ pub enum Statement {
         else_branch: Option<Box<Statement>>,
     },
     Print(Box<Expression>),
+    Return(Option<Box<Expression>>),
     Var {
         name: Token,
         initializer: Option<Box<Expression>>,
@@ -42,6 +43,7 @@ impl Statement {
                 else_branch,
             } => visitor.visit_if(condition, then_branch, else_branch.as_deref()),
             &Self::Print(ref e) => visitor.visit_print(e),
+            &Self::Return(ref e) => visitor.visit_return(e.as_deref()),
             &Self::Var {
                 ref name,
                 initializer,
@@ -65,6 +67,7 @@ pub trait StatementVisitor<T> {
         else_branch: Option<&Statement>,
     ) -> T;
     fn visit_print(&mut self, expression: &Expression) -> T;
+    fn visit_return(&mut self, expression: Option<&Expression>) -> T;
     fn visit_var(&mut self, name: &Token, initializer: Option<&Expression>) -> T;
     fn visit_while(&mut self, condition: &Expression, body: &Statement) -> T;
 }

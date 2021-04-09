@@ -1,3 +1,5 @@
+use std::error;
+use std::fmt;
 use std::io;
 
 use crate::callable::Callable;
@@ -7,7 +9,30 @@ use crate::expression::{Expression, ExpressionVisitor, Value};
 use crate::statement::{Statement, StatementVisitor};
 use crate::token::{Lexeme, Token};
 
-pub type InterpreterResult = Result<Value, RuntimeError>;
+#[derive(Debug)]
+pub enum ErrorOrReturn {
+    Error(RuntimeError),
+    Return(Value),
+}
+
+impl fmt::Display for ErrorOrReturn {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Error(ref e) => e.fmt(f),
+            Self::Return(ref v) => write!(f, "{}", v.to_string()),
+        }
+    }
+}
+
+impl error::Error for ErrorOrReturn {}
+
+impl From<RuntimeError> for ErrorOrReturn {
+    fn from(error: RuntimeError) -> Self {
+        Self::Error(error)
+    }
+}
+
+pub type InterpreterResult = Result<Value, ErrorOrReturn>;
 
 pub struct Interpreter<'a> {
     pub output: &'a mut dyn io::Write,
@@ -79,10 +104,10 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
                 [Value::String(left_string), Value::String(ref right_string)] => {
                     Ok(Value::String(left_string + right_string))
                 }
-                _ => Err(RuntimeError::from_token(
+                _ => Err(ErrorOrReturn::Error(RuntimeError::from_token(
                     operator,
                     "Operands must be two numbers or two strings.".to_owned(),
-                )),
+                ))),
             },
             Lexeme::Less => {
                 let left_numeric = check_number_operand(operator, left_value)?;
@@ -110,10 +135,10 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
             }
             Lexeme::EqualEqual => Ok(Value::Bool(left_value == right_value)),
             Lexeme::BangEqual => Ok(Value::Bool(left_value != right_value)),
-            ref l => Err(RuntimeError::from_token(
+            ref l => Err(ErrorOrReturn::Error(RuntimeError::from_token(
                 operator,
                 format!("Invalid binary operator '{:?}'.", l),
-            )),
+            ))),
         }
     }
 
@@ -132,22 +157,22 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
         match callee_value {
             Value::Callable(ref c) => {
                 if c.arity() != argument_values.len() {
-                    return Err(RuntimeError::from_token(
+                    return Err(ErrorOrReturn::Error(RuntimeError::from_token(
                         paren,
                         format!(
                             "Expected {} arguments but got {}.",
                             c.arity(),
                             argument_values.len()
                         ),
-                    ));
+                    )));
                 }
 
                 c.call(self, argument_values)
             }
-            _ => Err(RuntimeError::from_token(
+            _ => Err(ErrorOrReturn::Error(RuntimeError::from_token(
                 paren,
                 "Can only call functions and classes".to_owned(),
-            )),
+            ))),
         }
     }
 
@@ -182,10 +207,10 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
                     Ok(left_value)
                 }
             }
-            _ => Err(RuntimeError::from_token(
+            _ => Err(ErrorOrReturn::Error(RuntimeError::from_token(
                 operator,
                 "Invalid logical operator.".to_owned(),
-            )),
+            ))),
         }
     }
 
@@ -198,15 +223,15 @@ impl<'a> ExpressionVisitor<InterpreterResult> for Interpreter<'a> {
                 Ok(Value::Number(-numeric_operand))
             }
             Lexeme::Bang => Ok(Value::Bool(!operand.is_truthy())),
-            _ => Err(RuntimeError::from_token(
+            _ => Err(ErrorOrReturn::Error(RuntimeError::from_token(
                 operator,
                 "Invalid unary operator.".to_owned(),
-            )),
+            ))),
         }
     }
 
     fn visit_variable(&mut self, name: &Token) -> InterpreterResult {
-        env_get(&self.environment, name)
+        env_get(&self.environment, name).map_err(|e| ErrorOrReturn::Error(e))
     }
 }
 
@@ -241,6 +266,7 @@ impl<'a> StatementVisitor<InterpreterResult> for Interpreter<'a> {
                 name: name.identifier(),
                 params: params.clone(),
                 body: body.clone(),
+                closure: env_new(Some(&self.environment)),
             }),
         );
 
@@ -260,6 +286,16 @@ impl<'a> StatementVisitor<InterpreterResult> for Interpreter<'a> {
         };
 
         Ok(Value::Nil)
+    }
+
+    fn visit_return(&mut self, expression: Option<&Expression>) -> InterpreterResult {
+        let value = if let Some(e) = expression {
+            self.evaluate(e)?
+        } else {
+            Value::Nil
+        };
+
+        Err(ErrorOrReturn::Return(value))
     }
 
     fn visit_print(&mut self, expression: &Expression) -> InterpreterResult {
