@@ -1,7 +1,9 @@
 use std::cell;
 use std::collections;
 use std::rc;
+use std::time;
 
+use crate::callable::Callable;
 use crate::errors::RuntimeError;
 use crate::expression::Value;
 use crate::token::Token;
@@ -20,6 +22,32 @@ impl EnvironmentData {
             enclosing: enclosing,
         }
     }
+}
+
+pub fn env_root() -> Environment {
+    let env = env_new(None);
+
+    {
+        let mut e = env.borrow_mut();
+
+        e.values.insert(
+            "clock".to_owned(),
+            Value::Callable(Callable::BuiltIn {
+                arity: 0,
+                func: |_, _| {
+                    let start = time::SystemTime::now();
+                    Ok(Value::Number(
+                        start
+                            .duration_since(time::UNIX_EPOCH)
+                            .expect("Time went backwards")
+                            .as_millis() as f64,
+                    ))
+                },
+            }),
+        );
+    }
+
+    env
 }
 
 pub fn env_new(enclosing: Option<&Environment>) -> Environment {

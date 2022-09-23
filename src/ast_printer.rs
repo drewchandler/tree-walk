@@ -26,6 +26,21 @@ impl ExpressionVisitor<String> for AstPrinter {
         self.parenthesize(operator.to_string(), &[left, right])
     }
 
+    fn visit_call(
+        &mut self,
+        callee: &Expression,
+        _paren: &Token,
+        arguments: &Vec<Expression>,
+    ) -> String {
+        let arguments_string = arguments
+            .into_iter()
+            .map(|e| e.accept(self))
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        format!("(call {} {})", callee.accept(self), arguments_string)
+    }
+
     fn visit_grouping(&mut self, expression: &Expression) -> String {
         self.parenthesize("group".to_owned(), &[expression])
     }
@@ -62,6 +77,24 @@ impl StatementVisitor<String> for AstPrinter {
         self.parenthesize(";".to_owned(), &[expression])
     }
 
+    fn visit_function(
+        &mut self,
+        name: &Token,
+        params: &Vec<Token>,
+        body: &Box<Statement>,
+    ) -> String {
+        format!(
+            "(fun {} ({}) {})",
+            name.identifier(),
+            params
+                .into_iter()
+                .map(|p| p.identifier())
+                .collect::<Vec<String>>()
+                .join(" "),
+            body.accept(self)
+        )
+    }
+
     fn visit_if(
         &mut self,
         condition: &Expression,
@@ -86,6 +119,14 @@ impl StatementVisitor<String> for AstPrinter {
 
     fn visit_print(&mut self, expression: &Expression) -> String {
         self.parenthesize("print".to_owned(), &[expression])
+    }
+
+    fn visit_return(&mut self, expression: Option<&Expression>) -> String {
+        if let Some(e) = expression {
+            self.parenthesize("return".to_owned(), &[e])
+        } else {
+            "(return)".to_owned()
+        }
     }
 
     fn visit_var(&mut self, name: &Token, initializer: Option<&Expression>) -> String {

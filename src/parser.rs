@@ -10,6 +10,7 @@ use crate::token::{Lexeme, Token};
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseError {
     InvalidAssignmentTarget { token: Token },
+    TooManyArguments { token: Token },
     UnexpectedToken { token: Token, message: String },
     UnexpectedEnd,
 }
@@ -17,6 +18,10 @@ pub enum ParseError {
 impl ParseError {
     fn invalid_assignment_target(token: Token) -> Self {
         Self::InvalidAssignmentTarget { token }
+    }
+
+    fn too_many_arguments(token: Token) -> Self {
+        Self::TooManyArguments { token }
     }
 
     fn unexpected_token(token: Token, message: String) -> Self {
@@ -29,10 +34,15 @@ impl fmt::Display for ParseError {
         match self {
             Self::InvalidAssignmentTarget { token } => write!(
                 f,
-                "[line {}] at '{}' {}",
+                "[line {}] at '{}' Invalid assignment target",
                 token.line,
                 token.to_string(),
-                "Invalid assignment target"
+            ),
+            Self::TooManyArguments { token } => write!(
+                f,
+                "[line {}] at '{}' Can't have more than 255 arguments",
+                token.line,
+                token.to_string(),
             ),
             Self::UnexpectedToken { token, message } => write!(
                 f,
@@ -65,20 +75,68 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> StatementParseResult {
-        if matches!(self.peek_lexeme(), Some(&Lexeme::Var)) {
-            self.advance();
-            self.var_declaration()
-        } else {
-            self.statement()
+        match self.peek_lexeme() {
+            Some(&Lexeme::Fun) => {
+                self.advance();
+                self.function("function")
+            }
+            Some(&Lexeme::Var) => {
+                self.advance();
+                self.var_declaration()
+            }
+            _ => self.statement(),
         }
+    }
+
+    fn function(&mut self, kind: &str) -> StatementParseResult {
+        let name = self.consume(
+            |l| matches!(l, &Lexeme::Identifier(_)),
+            format!("Expected {} name.", kind),
+        )?;
+
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            format!("Expected '(' after {} name.", kind),
+        )?;
+
+        let mut params = vec![];
+        if self.peek_lexeme() != Some(&Lexeme::RightParen) {
+            loop {
+                params.push(self.consume(
+                    |l| matches!(l, &Lexeme::Identifier(_)),
+                    "Expected parameter name".to_owned(),
+                )?);
+
+                if self.peek_lexeme() != Some(&Lexeme::Comma) {
+                    break;
+                }
+
+                self.advance().unwrap();
+            }
+        }
+
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after parameters.".to_owned(),
+        )?;
+
+        self.consume(
+            |l| l == &Lexeme::LeftBrace,
+            format!("Expected '{{' before {} body.", kind),
+        )?;
+
+        let body = self.block()?;
+
+        Ok(Statement::Function {
+            name,
+            params,
+            body: Box::new(body),
+        })
     }
 
     fn var_declaration(&mut self) -> StatementParseResult {
         let name = self.consume(
-            |l| match l {
-                &Lexeme::Identifier(_) => true,
-                _ => false,
-            },
+            |l| matches!(l, &Lexeme::Identifier(_)),
             "Expected variable name.".to_owned(),
         )?;
 
@@ -112,6 +170,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.print_statement()
             }
+            Some(&Lexeme::Return) => {
+                self.advance();
+                self.return_statement()
+            }
             Some(&Lexeme::While) => {
                 self.advance();
                 self.while_statement()
@@ -130,14 +192,16 @@ impl<'a> Parser<'a> {
             "Expected '(' after for.".to_owned(),
         )?;
 
-        let initializer = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
-            self.advance();
-            None
-        } else if matches!(self.peek_lexeme(), Some(&Lexeme::Var)) {
-            self.advance();
-            self.var_declaration().map(|v| Some(v))?
-        } else {
-            self.expression_statement().map(|v| Some(v))?
+        let initializer = match self.peek_lexeme() {
+            Some(&Lexeme::Semicolon) => {
+                self.advance();
+                None
+            }
+            Some(&Lexeme::Var) => {
+                self.advance();
+                self.var_declaration().map(|v| Some(v))?
+            }
+            _ => self.expression_statement().map(|v| Some(v))?,
         };
 
         let condition = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
@@ -216,6 +280,21 @@ impl<'a> Parser<'a> {
         )?;
 
         Ok(Statement::Print(Box::new(expression)))
+    }
+
+    fn return_statement(&mut self) -> StatementParseResult {
+        let expression = if !matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
+            Some(Box::new(self.expression()?))
+        } else {
+            None
+        };
+
+        self.consume(
+            |l| l == &Lexeme::Semicolon,
+            "Expected ';' after return value.".to_owned(),
+        )?;
+
+        Ok(Statement::Return(expression))
     }
 
     fn while_statement(&mut self) -> StatementParseResult {
@@ -421,7 +500,53 @@ impl<'a> Parser<'a> {
             });
         }
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> ExpressionParseResult {
+        let mut expr = self.primary()?;
+
+        loop {
+            if matches!(self.peek_lexeme(), Some(&Lexeme::LeftParen)) {
+                self.advance().unwrap();
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expression) -> ExpressionParseResult {
+        let mut arguments = Vec::new();
+
+        if !matches!(self.peek_lexeme(), Some(&Lexeme::RightParen)) {
+            loop {
+                if arguments.len() >= 255 {
+                    return Err(ParseError::too_many_arguments(self.peek().unwrap()));
+                }
+
+                arguments.push(self.expression()?);
+
+                if matches!(self.peek_lexeme(), Some(&Lexeme::Comma)) {
+                    self.advance().unwrap();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after arguments.".to_owned(),
+        )?;
+
+        Ok(Expression::Call {
+            callee: Box::new(callee),
+            paren,
+            arguments,
+        })
     }
 
     fn primary(&mut self) -> ExpressionParseResult {
@@ -475,6 +600,10 @@ impl<'a> Parser<'a> {
 
     fn advance(&mut self) -> Option<Token> {
         self.tokens.next().map(|t| t.clone())
+    }
+
+    fn peek(&mut self) -> Option<Token> {
+        self.tokens.peek().map(|t| t.clone().to_owned())
     }
 
     fn peek_lexeme(&mut self) -> Option<&Lexeme> {
