@@ -3,7 +3,7 @@ use std::error;
 use std::fmt;
 use std::iter;
 
-use crate::expression::Expression;
+use crate::expression::{Expression, Value};
 use crate::token::{Lexeme, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -156,46 +156,26 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> ParseResult {
         match self.advance() {
-            Some(
-                token
-                @
-                Token {
-                    lexeme: Lexeme::False,
-                    ..
-                },
-            ) => Ok(Expression::Literal(token)),
-            Some(
-                token
-                @
-                Token {
-                    lexeme: Lexeme::True,
-                    ..
-                },
-            ) => Ok(Expression::Literal(token)),
-            Some(
-                token
-                @
-                Token {
-                    lexeme: Lexeme::Nil,
-                    ..
-                },
-            ) => Ok(Expression::Literal(token)),
-            Some(
-                token
-                @
-                Token {
-                    lexeme: Lexeme::Number(_),
-                    ..
-                },
-            ) => Ok(Expression::Literal(token)),
-            Some(
-                token
-                @
-                Token {
-                    lexeme: Lexeme::String(_),
-                    ..
-                },
-            ) => Ok(Expression::Literal(token)),
+            Some(Token {
+                lexeme: Lexeme::False,
+                ..
+            }) => Ok(Expression::Literal(Value::Bool(false))),
+            Some(Token {
+                lexeme: Lexeme::True,
+                ..
+            }) => Ok(Expression::Literal(Value::Bool(true))),
+            Some(Token {
+                lexeme: Lexeme::Nil,
+                ..
+            }) => Ok(Expression::Literal(Value::Nil)),
+            Some(Token {
+                lexeme: Lexeme::Number(number),
+                ..
+            }) => Ok(Expression::Literal(Value::Number(number))),
+            Some(Token {
+                lexeme: Lexeme::String(string),
+                ..
+            }) => Ok(Expression::Literal(Value::String(string))),
             Some(Token {
                 lexeme: Lexeme::LeftParen,
                 ..
@@ -258,7 +238,7 @@ impl<'a> Iterator for Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::Expression;
+    use crate::expression::{Expression, Value};
     use crate::token::{Lexeme, Token};
 
     #[test]
@@ -271,9 +251,8 @@ mod tests {
 
         assert_eq!(
             parser.next(),
-            Some(Ok(Expression::Literal(Token::new(
-                Lexeme::String("string literal".to_owned()),
-                0
+            Some(Ok(Expression::Literal(Value::String(
+                "string literal".to_owned()
             ))))
         );
         assert_eq!(parser.next(), None);
@@ -289,7 +268,7 @@ mod tests {
 
         assert_eq!(
             parser.next(),
-            Some(Ok(Expression::Literal(Token::new(Lexeme::Number(12.0), 0))))
+            Some(Ok(Expression::Literal(Value::Number(12.0))))
         );
         assert_eq!(parser.next(), None);
     }
@@ -301,7 +280,7 @@ mod tests {
 
         assert_eq!(
             parser.next(),
-            Some(Ok(Expression::Literal(Token::new(Lexeme::True, 0))))
+            Some(Ok(Expression::Literal(Value::Bool(true))))
         );
         assert_eq!(parser.next(), None);
     }
@@ -313,7 +292,7 @@ mod tests {
 
         assert_eq!(
             parser.next(),
-            Some(Ok(Expression::Literal(Token::new(Lexeme::False, 0))))
+            Some(Ok(Expression::Literal(Value::Bool(false))))
         );
         assert_eq!(parser.next(), None);
     }
@@ -323,10 +302,7 @@ mod tests {
         let tokens = vec![Token::new(Lexeme::Nil, 0), Token::new(Lexeme::Eof, 0)];
         let mut parser = Parser::new(&tokens);
 
-        assert_eq!(
-            parser.next(),
-            Some(Ok(Expression::Literal(Token::new(Lexeme::Nil, 0))))
-        );
+        assert_eq!(parser.next(), Some(Ok(Expression::Literal(Value::Nil))));
         assert_eq!(parser.next(), None);
     }
 
@@ -343,7 +319,7 @@ mod tests {
             parser.next(),
             Some(Ok(Expression::Unary {
                 operator: Token::new(Lexeme::Minus, 0),
-                expression: Box::new(Expression::Literal(Token::new(Lexeme::Number(12.0), 0)))
+                expression: Box::new(Expression::Literal(Value::Number(12.0)))
             }))
         );
         assert_eq!(parser.next(), None);
@@ -362,9 +338,9 @@ mod tests {
         assert_eq!(
             parser.next(),
             Some(Ok(Expression::Binary {
-                left: Box::new(Expression::Literal(Token::new(Lexeme::Number(2.0), 0))),
+                left: Box::new(Expression::Literal(Value::Number(2.0))),
                 operator: Token::new(Lexeme::Minus, 0),
-                right: Box::new(Expression::Literal(Token::new(Lexeme::Number(12.0), 0)))
+                right: Box::new(Expression::Literal(Value::Number(12.0)))
             }))
         );
         assert_eq!(parser.next(), None);
@@ -383,7 +359,7 @@ mod tests {
         assert_eq!(
             parser.next(),
             Some(Ok(Expression::Grouping(Box::new(Expression::Literal(
-                Token::new(Lexeme::Number(2.0), 0)
+                Value::Number(2.0)
             )))))
         );
         assert_eq!(parser.next(), None);

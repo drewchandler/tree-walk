@@ -1,5 +1,6 @@
 mod ast_printer;
 mod expression;
+mod interpreter;
 mod parser;
 mod scanner;
 mod token;
@@ -39,25 +40,41 @@ fn run_prompt() -> Result<()> {
             break;
         }
 
-        run(line)?;
+        match run(line) {
+            Ok(v) => {
+                println!("{}", v);
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+            }
+        }
     }
 
     Ok(())
 }
 
 fn run_file<P: AsRef<path::Path> + fmt::Display>(filename: P) -> Result<()> {
-    run(fs::read_to_string(filename)?)
+    let source = fs::read_to_string(filename)?;
+
+    if let Err(e) = run(source) {
+        eprintln!("{}", e);
+        std::process::exit(70);
+    }
+
+    Ok(())
 }
 
-fn run(source: String) -> Result<()> {
+fn run(source: String) -> Result<expression::Value> {
     let scan_results =
         scanner::Scanner::new(&source).collect::<std::result::Result<Vec<_>, _>>()?;
     let parse_results =
         parser::Parser::new(&scan_results).collect::<std::result::Result<Vec<_>, _>>()?;
 
+    let mut last_value = expression::Value::Nil;
+
     for expression in parse_results {
-        println!("{}", expression.accept(&mut ast_printer::AstPrinter));
+        last_value = expression.accept(&mut interpreter::Interpreter)?;
     }
 
-    Ok(())
+    Ok(last_value)
 }

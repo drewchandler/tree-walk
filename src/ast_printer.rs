@@ -1,4 +1,4 @@
-use crate::expression::Expression;
+use crate::expression::{Expression, Value};
 use crate::token::Token;
 use crate::visitor::Visitor;
 
@@ -26,7 +26,7 @@ impl Visitor<String> for AstPrinter {
         self.parenthesize("group".to_owned(), &[expression])
     }
 
-    fn visit_literal(&mut self, value: &Token) -> String {
+    fn visit_literal(&mut self, value: &Value) -> String {
         value.to_string()
     }
 
@@ -38,7 +38,7 @@ impl Visitor<String> for AstPrinter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::Expression;
+    use crate::expression::{Expression, Value};
     use crate::token::{Lexeme, Token};
 
     #[test]
@@ -46,11 +46,11 @@ mod tests {
         let expression = Expression::Binary {
             left: Box::new(Expression::Unary {
                 operator: Token::new(Lexeme::Minus, 0),
-                expression: Box::new(Expression::Literal(Token::new(Lexeme::Number(123.0), 0))),
+                expression: Box::new(Expression::Literal(Value::Number(123.0))),
             }),
             operator: Token::new(Lexeme::Star, 0),
             right: Box::new(Expression::Grouping(Box::new(Expression::Literal(
-                Token::new(Lexeme::Number(45.67), 0),
+                Value::Number(45.67),
             )))),
         };
 
