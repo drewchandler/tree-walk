@@ -60,6 +60,13 @@ impl Token {
         Token { lexeme, line }
     }
 
+    pub fn identifier(&self) -> String {
+        match self.lexeme {
+            Lexeme::Identifier(ref ident) => ident.clone(),
+            _ => panic!("Variables should only have Identifier lexeme!"),
+        }
+    }
+
     pub fn to_string(&self) -> String {
         match &self.lexeme {
             Lexeme::LeftParen => "(".to_owned(),
