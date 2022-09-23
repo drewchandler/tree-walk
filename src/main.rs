@@ -1,3 +1,6 @@
+mod scanner;
+mod token;
+
 use std::env;
 use std::fmt;
 use std::fs;
@@ -5,9 +8,9 @@ use std::io::{self, Write};
 use std::path;
 use std::process;
 
-type TWResult<T> = Result<T, Box<dyn std::error::Error>>;
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-fn main() -> TWResult<()> {
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
 
     match args.len() {
@@ -20,7 +23,7 @@ fn main() -> TWResult<()> {
     }
 }
 
-fn run_prompt() -> TWResult<()> {
+fn run_prompt() -> Result<()> {
     loop {
         print!("> ");
         io::stdout().flush()?;
@@ -38,14 +41,18 @@ fn run_prompt() -> TWResult<()> {
     Ok(())
 }
 
-fn run_file<P: AsRef<path::Path> + fmt::Display>(filename: P) -> TWResult<()> {
+fn run_file<P: AsRef<path::Path> + fmt::Display>(filename: P) -> Result<()> {
     run(fs::read_to_string(filename)?)
 }
 
-fn run(source: String) -> TWResult<()> {
-    for token in source.split(" ") {
-        println!("{}", token);
-    }
+fn run(source: String) -> Result<()> {
+    let scan_results: std::result::Result<Vec<_>, _> = scanner::Scanner::new(&source).collect();
 
-    Ok(())
+    scan_results.map_err(|e| e.into()).and_then(|tokens| {
+        for token in tokens {
+            println!("#{:?}", token);
+        }
+
+        Ok(())
+    })
 }
