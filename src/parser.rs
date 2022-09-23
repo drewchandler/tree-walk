@@ -82,13 +82,13 @@ impl<'a> Parser<'a> {
             "Expected variable name.".to_owned(),
         )?;
 
-        let mut initializer: Option<Box<Expression>> = None;
-
-        if matches!(self.peek_lexeme(), Some(&Lexeme::Equal)) {
+        let initializer = if matches!(self.peek_lexeme(), Some(&Lexeme::Equal)) {
             self.advance();
             let expression = self.expression()?;
-            initializer = Some(Box::new(expression));
-        }
+            Some(Box::new(expression))
+        } else {
+            None
+        };
 
         self.consume(
             |l| l == &Lexeme::Semicolon,
@@ -100,9 +100,21 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> StatementParseResult {
         match self.peek_lexeme() {
+            Some(&Lexeme::For) => {
+                self.advance();
+                self.for_statement()
+            }
+            Some(&Lexeme::If) => {
+                self.advance();
+                self.if_statement()
+            }
             Some(&Lexeme::Print) => {
                 self.advance();
                 self.print_statement()
+            }
+            Some(&Lexeme::While) => {
+                self.advance();
+                self.while_statement()
             }
             Some(&Lexeme::LeftBrace) => {
                 self.advance();
@@ -110,6 +122,90 @@ impl<'a> Parser<'a> {
             }
             _ => self.expression_statement(),
         }
+    }
+
+    fn for_statement(&mut self) -> StatementParseResult {
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            "Expected '(' after for.".to_owned(),
+        )?;
+
+        let initializer = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
+            self.advance();
+            None
+        } else if matches!(self.peek_lexeme(), Some(&Lexeme::Var)) {
+            self.advance();
+            self.var_declaration().map(|v| Some(v))?
+        } else {
+            self.expression_statement().map(|v| Some(v))?
+        };
+
+        let condition = if matches!(self.peek_lexeme(), Some(&Lexeme::Semicolon)) {
+            None
+        } else {
+            self.expression().map(|c| Some(Box::new(c)))?
+        };
+
+        self.consume(
+            |l| l == &Lexeme::Semicolon,
+            "Expected ';' after loop condition.".to_owned(),
+        )?;
+
+        let increment = if matches!(self.peek_lexeme(), Some(&Lexeme::RightParen)) {
+            None
+        } else {
+            self.expression().map(|i| Some(Box::new(i)))?
+        };
+
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after for clauses.".to_owned(),
+        )?;
+
+        let mut body = self.statement()?;
+
+        if let Some(i) = increment {
+            body = Statement::Block(vec![body, Statement::Expression(i)]);
+        }
+
+        body = Statement::While {
+            condition: condition
+                .unwrap_or_else(|| Box::new(Expression::Literal(Value::Bool(true)))),
+            body: Box::new(body),
+        };
+
+        if let Some(i) = initializer {
+            body = Statement::Block(vec![i, body]);
+        }
+
+        Ok(body)
+    }
+
+    fn if_statement(&mut self) -> StatementParseResult {
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            "Expected '(' after if.".to_owned(),
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected '(' after if.".to_owned(),
+        )?;
+
+        let then_branch = self.statement()?;
+
+        let else_branch = if matches!(self.peek_lexeme(), Some(&Lexeme::Else)) {
+            self.advance();
+            self.statement().map(|s| Some(Box::new(s)))?
+        } else {
+            None
+        };
+
+        Ok(Statement::If {
+            condition: Box::new(condition),
+            then_branch: Box::new(then_branch),
+            else_branch,
+        })
     }
 
     fn print_statement(&mut self) -> StatementParseResult {
@@ -120,6 +216,24 @@ impl<'a> Parser<'a> {
         )?;
 
         Ok(Statement::Print(Box::new(expression)))
+    }
+
+    fn while_statement(&mut self) -> StatementParseResult {
+        self.consume(
+            |l| l == &Lexeme::LeftParen,
+            "Expected '(' after while.".to_owned(),
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            |l| l == &Lexeme::RightParen,
+            "Expected ')' after condition.".to_owned(),
+        )?;
+        let body = self.statement()?;
+
+        Ok(Statement::While {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        })
     }
 
     fn block(&mut self) -> StatementParseResult {
@@ -157,7 +271,7 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> ExpressionParseResult {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if matches!(self.peek_lexeme(), Some(&Lexeme::Equal)) {
             let equals = self.advance().unwrap();
@@ -171,6 +285,40 @@ impl<'a> Parser<'a> {
             }
 
             return Err(ParseError::invalid_assignment_target(equals));
+        }
+
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> ExpressionParseResult {
+        let mut expr = self.and()?;
+
+        while matches!(self.peek_lexeme(), Some(&Lexeme::Or)) {
+            let operator = self.advance().unwrap();
+            let right = self.and()?;
+
+            expr = Expression::Logical {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+            };
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ExpressionParseResult {
+        let mut expr = self.equality()?;
+
+        while matches!(self.peek_lexeme(), Some(&Lexeme::Or)) {
+            let operator = self.advance().unwrap();
+            let right = self.equality()?;
+
+            expr = Expression::Logical {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+            };
         }
 
         Ok(expr)
@@ -509,6 +657,28 @@ mod tests {
     }
 
     #[test]
+    fn it_handles_logical_expressions() {
+        let tokens = vec![
+            Token::new(Lexeme::True, 0),
+            Token::new(Lexeme::Or, 0),
+            Token::new(Lexeme::False, 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Eof, 0),
+        ];
+        let mut parser = Parser::new(&tokens);
+
+        assert_eq!(
+            parser.next(),
+            Some(Ok(Statement::Expression(Box::new(Expression::Logical {
+                left: Box::new(Expression::Literal(Value::Bool(true))),
+                operator: Token::new(Lexeme::Or, 0),
+                right: Box::new(Expression::Literal(Value::Bool(false)))
+            }))))
+        );
+        assert_eq!(parser.next(), None);
+    }
+
+    #[test]
     fn it_handles_grouping_expressions() {
         let tokens = vec![
             Token::new(Lexeme::LeftParen, 0),
@@ -664,6 +834,66 @@ mod tests {
                 name: Token::new(Lexeme::Identifier("foo".to_owned()), 0),
                 initializer: Some(Box::new(Expression::Literal(Value::Number(5.0))))
             }])))
+        );
+        assert_eq!(parser.next(), None);
+    }
+
+    #[test]
+    fn it_handles_if_without_else() {
+        let tokens = vec![
+            Token::new(Lexeme::If, 0),
+            Token::new(Lexeme::LeftParen, 0),
+            Token::new(Lexeme::True, 0),
+            Token::new(Lexeme::RightParen, 0),
+            Token::new(Lexeme::Print, 0),
+            Token::new(Lexeme::String("hello".to_owned()), 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Eof, 0),
+        ];
+        let mut parser = Parser::new(&tokens);
+
+        assert_eq!(
+            parser.next(),
+            Some(Ok(Statement::If {
+                condition: Box::new(Expression::Literal(Value::Bool(true))),
+                then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                    Value::String("hello".to_owned())
+                )))),
+                else_branch: None
+            }))
+        );
+        assert_eq!(parser.next(), None);
+    }
+
+    #[test]
+    fn it_handles_if_with_else() {
+        let tokens = vec![
+            Token::new(Lexeme::If, 0),
+            Token::new(Lexeme::LeftParen, 0),
+            Token::new(Lexeme::True, 0),
+            Token::new(Lexeme::RightParen, 0),
+            Token::new(Lexeme::Print, 0),
+            Token::new(Lexeme::String("hello".to_owned()), 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Else, 0),
+            Token::new(Lexeme::Print, 0),
+            Token::new(Lexeme::String("goodbye".to_owned()), 0),
+            Token::new(Lexeme::Semicolon, 0),
+            Token::new(Lexeme::Eof, 0),
+        ];
+        let mut parser = Parser::new(&tokens);
+
+        assert_eq!(
+            parser.next(),
+            Some(Ok(Statement::If {
+                condition: Box::new(Expression::Literal(Value::Bool(true))),
+                then_branch: Box::new(Statement::Print(Box::new(Expression::Literal(
+                    Value::String("hello".to_owned())
+                )))),
+                else_branch: Some(Box::new(Statement::Print(Box::new(Expression::Literal(
+                    Value::String("goodbye".to_owned())
+                ))))),
+            }))
         );
         assert_eq!(parser.next(), None);
     }

@@ -34,6 +34,10 @@ impl ExpressionVisitor<String> for AstPrinter {
         value.to_string()
     }
 
+    fn visit_logical(&mut self, left: &Expression, operator: &Token, right: &Expression) -> String {
+        self.parenthesize(operator.to_string(), &[left, right])
+    }
+
     fn visit_unary(&mut self, operator: &Token, expression: &Expression) -> String {
         self.parenthesize(operator.to_string(), &[expression])
     }
@@ -58,6 +62,28 @@ impl StatementVisitor<String> for AstPrinter {
         self.parenthesize(";".to_owned(), &[expression])
     }
 
+    fn visit_if(
+        &mut self,
+        condition: &Expression,
+        then_branch: &Statement,
+        else_branch: Option<&Statement>,
+    ) -> String {
+        if let Some(e) = else_branch {
+            format!(
+                "(if-else {} {} {})",
+                condition.accept(self),
+                then_branch.accept(self),
+                e.accept(self)
+            )
+        } else {
+            format!(
+                "(if {} {})",
+                condition.accept(self),
+                then_branch.accept(self)
+            )
+        }
+    }
+
     fn visit_print(&mut self, expression: &Expression) -> String {
         self.parenthesize("print".to_owned(), &[expression])
     }
@@ -69,6 +95,10 @@ impl StatementVisitor<String> for AstPrinter {
             }
             None => format!("(var {})", name.identifier()),
         }
+    }
+
+    fn visit_while(&mut self, condition: &Expression, body: &Statement) -> String {
+        format!("(while {} {})", condition.accept(self), body.accept(self))
     }
 }
 
