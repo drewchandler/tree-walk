@@ -1,5 +1,8 @@
+mod ast_printer;
+mod expression;
 mod scanner;
 mod token;
+mod visitor;
 
 use std::env;
 use std::fmt;
