@@ -1,5 +1,6 @@
 mod ast_printer;
 mod expression;
+mod parser;
 mod scanner;
 mod token;
 mod visitor;
@@ -49,13 +50,14 @@ fn run_file<P: AsRef<path::Path> + fmt::Display>(filename: P) -> Result<()> {
 }
 
 fn run(source: String) -> Result<()> {
-    let scan_results: std::result::Result<Vec<_>, _> = scanner::Scanner::new(&source).collect();
+    let scan_results =
+        scanner::Scanner::new(&source).collect::<std::result::Result<Vec<_>, _>>()?;
+    let parse_results =
+        parser::Parser::new(&scan_results).collect::<std::result::Result<Vec<_>, _>>()?;
 
-    scan_results.map_err(|e| e.into()).and_then(|tokens| {
-        for token in tokens {
-            println!("#{:?}", token);
-        }
+    for expression in parse_results {
+        println!("{}", expression.accept(&mut ast_printer::AstPrinter));
+    }
 
-        Ok(())
-    })
+    Ok(())
 }

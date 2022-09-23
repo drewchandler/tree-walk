@@ -2,7 +2,7 @@ use crate::expression::Expression;
 use crate::token::Token;
 use crate::visitor::Visitor;
 
-struct AstPrinter;
+pub struct AstPrinter;
 
 impl AstPrinter {
     pub fn parenthesize(&mut self, name: String, expressions: &[&Expression]) -> String {
@@ -26,7 +26,7 @@ impl Visitor<String> for AstPrinter {
         self.parenthesize("group".to_owned(), &[expression])
     }
 
-    fn visit_literal(&mut self, value: f64) -> String {
+    fn visit_literal(&mut self, value: &Token) -> String {
         value.to_string()
     }
 
@@ -46,10 +46,12 @@ mod tests {
         let expression = Expression::Binary {
             left: Box::new(Expression::Unary {
                 operator: Token::new(Lexeme::Minus, 0),
-                expression: Box::new(Expression::Literal(123.0)),
+                expression: Box::new(Expression::Literal(Token::new(Lexeme::Number(123.0), 0))),
             }),
             operator: Token::new(Lexeme::Star, 0),
-            right: Box::new(Expression::Grouping(Box::new(Expression::Literal(45.67)))),
+            right: Box::new(Expression::Grouping(Box::new(Expression::Literal(
+                Token::new(Lexeme::Number(45.67), 0),
+            )))),
         };
 
         assert_eq!(

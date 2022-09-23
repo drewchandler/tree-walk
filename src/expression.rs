@@ -1,6 +1,7 @@
 use crate::token::Token;
 use crate::visitor::Visitor;
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Binary {
         left: Box<Expression>,
@@ -8,7 +9,7 @@ pub enum Expression {
         right: Box<Expression>,
     },
     Grouping(Box<Expression>),
-    Literal(f64),
+    Literal(Token),
     Unary {
         operator: Token,
         expression: Box<Expression>,
@@ -24,7 +25,7 @@ impl Expression {
                 ref right,
             } => visitor.visit_binary(left, operator, right),
             Expression::Grouping(ref e) => visitor.visit_grouping(e),
-            Expression::Literal(value) => visitor.visit_literal(value),
+            Expression::Literal(ref value) => visitor.visit_literal(value),
             Expression::Unary {
                 ref operator,
                 ref expression,
